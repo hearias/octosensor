@@ -1,0 +1,248 @@
+      
+
+#include <esp_now.h>
+#include <WiFi.h>
+
+#include <Wire.h>
+
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+
+#define SCREEN_WIDTH 128  // tamanho do display
+#define SCREEN_HEIGHT 64  
+
+// conexão com o display
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+
+
+uint8_t broadcastAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF  };
+// endereço de broadcast para enviar dados para qualquer esp 
+
+// variaveis que são utilizadas na recepção de dados
+int octoCommand;  
+int octoNode = 0 ;// recebe o numero do sensor utilizado
+int octoValue; //recebe o valor lido pelo sensor
+
+// variavel para armazenar o valor de distancia lido por cada sensor
+// pois ao realizar o print direto no display ocorre problemas de sincronia de dados
+int sensor1=0;
+int sensor2=0;
+int sensor3=0;
+int sensor4=0;
+int sensor5=0;
+int sensor6=0;
+int sensor7=0;
+
+
+// variaveis utilizadas para armazenar momentaneamente os valores de distancia e de qual sensor será utilizado  
+int receber=0;
+int dados=0;
+
+
+// Variáveis utilizadas na recepção dos dados
+int incomingCommand; 
+int incomingNode;
+int incomingValue;
+
+// Variable to store if sending data was successful
+String success;
+
+//Structure example to send data
+//Must match the receiver structure
+typedef struct struct_message {
+    int comm;
+    int node;
+    int value;
+} struct_message;
+
+// Create a struct_message called BME280Readings to hold sensor readings
+struct_message OCTOReadings;    
+
+// Create a struct_message to hold incoming sensor readings
+struct_message incomingReadings;
+
+esp_now_peer_info_t peerInfo;
+
+// Callback when data is sent
+void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
+  //Serial.print("\r\nLast Packet Send Status:\t");
+  //Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
+  if (status ==0){
+    success = "Delivery Success :)";
+  }
+  else{
+    success = "Delivery Fail :(";
+  }
+}
+
+// Callback when data is received
+void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
+  memcpy(&incomingReadings, incomingData, sizeof(incomingReadings));
+  //Serial.print("Bytes received: ");
+  //Serial.println(len);
+  incomingCommand = incomingReadings.comm;
+  incomingNode = incomingReadings.node;
+  incomingValue  = incomingReadings.value;
+
+}
+ 
+void setup() {
+  // Init Serial Monitor
+  Serial.begin(115200);
+  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { 
+    //Serial.println(F("SSD1306 allocation failed"));
+    for(;;);
+  }
+ 
+  // Set device as a Wi-Fi Station
+  WiFi.mode(WIFI_STA);
+
+  // Init ESP-NOW
+  if (esp_now_init() != ESP_OK) {
+    //Serial.println("Error initializing ESP-NOW");
+    return;
+  }
+
+  // Once ESPNow is successfully Init, we will register for Send CB to
+  // get the status of Trasnmitted packet
+  esp_now_register_send_cb(OnDataSent);
+  
+  // Register peer
+  memcpy(peerInfo.peer_addr, broadcastAddress, 6);
+  peerInfo.channel = 0;  
+  peerInfo.encrypt = false;
+  
+  // Add peer        
+  if (esp_now_add_peer(&peerInfo) != ESP_OK){
+    //Serial.println("Failed to add peer");
+    return;
+  }
+  // Register for a callback function that will be called when data is received
+  esp_now_register_recv_cb(OnDataRecv);
+}
+ 
+void loop() {
+  getReadings();
+ 
+  // Set values to send
+  OCTOReadings.comm = octoCommand;
+  OCTOReadings.node = octoNode;
+  OCTOReadings.value = octoValue;
+
+  // Send message via ESP-NOW
+  esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &OCTOReadings, sizeof(OCTOReadings));
+   
+  if (result == ESP_OK) {
+    //Serial.println("Sent with success");
+  }
+  else {
+    //Serial.println("Error sending the data");
+  }
+  isadora();
+  updateDisplay();
+
+}
+void getReadings(){
+  octoCommand = 0;
+  octoNode = 0;
+  octoValue = 0;
+}
+
+void updateDisplay(){
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(WHITE);
+  display.setCursor(0, 0);
+  // Display Readings on OLED Display
+  receber=incomingNode;
+  dados=incomingValue;
+  
+  //separa os dados pra posteriormente imprimir no display  
+  if(receber==1){
+    sensor1=dados;
+  }
+    if(receber==2){
+    sensor2=dados;
+
+  }
+    if(receber==3){
+    sensor3=dados;
+
+  }
+    if(receber==4){
+    sensor4=dados;
+    }
+  if(receber==5){
+   sensor5=dados;
+}
+    if(receber==6){
+    sensor6=dados;
+
+  }
+     if(receber==7){
+    sensor7=dados;
+
+  }
+
+    display.setCursor(0, 18);
+    display.print("v1: ");
+    display.print(sensor1);
+
+    display.setCursor(0, 28);
+    display.print("v2: ");
+    display.print(sensor2);
+
+    display.setCursor(0, 38);
+    display.print("v3: ");
+    display.print(sensor3);
+
+    display.setCursor(0, 48);
+    display.print("v4: ");
+    display.print(sensor4);
+
+    display.setCursor(70, 18);
+    display.print("v5: ");
+    display.print(sensor5);
+    
+    display.setCursor(70, 28);
+    display.print("v6: ");
+    display.print(sensor6);
+ 
+    display.setCursor(70, 37);
+    display.print("v7: ");
+    display.print(sensor7);   
+    display.display();
+ 
+  
+}
+
+void isadora(){
+      Serial.print(1,DEC); // Canal 1 do Isadora
+      Serial.print(sensor1); // Envia sensor 1   
+      Serial.println(); //Send a value to eom
+      
+      Serial.print(2,DEC); // Canal 2 do Isadora
+      Serial.print(sensor2); // Envia sensor 2
+      Serial.println(); //Send a value to eom
+      
+      Serial.print(3,DEC); // Canal 2 do Isadora
+      Serial.print(sensor3); // Envia sensor 2     
+      Serial.println(); //Send a value to eom
+      
+      Serial.print(4,DEC); // Canal 2 do Isadora
+      Serial.print(sensor4); // Envia sensor 2
+      Serial.println(); //Send a value to eom
+      
+      Serial.print(5,DEC); // Canal 2 do Isadora
+      Serial.print(sensor5); // Envia sensor 2
+      Serial.println(); //Send a value to eom
+      
+      Serial.print(6,DEC); // Canal 2 do Isadora
+      Serial.print(sensor6); // Envia sensor 2
+      Serial.println(); //Send a value to eom
+      
+      Serial.print(7,DEC); // Canal 2 do Isadora
+      Serial.print(sensor7); // Envia sensor 2
+      Serial.println(); //Send a value to eom
+}
